@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pandas
+spotipy
+python-dotenv
+openai
+httpx
+itsdangerous

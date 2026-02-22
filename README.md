@@ -89,6 +89,7 @@ The remaining variables can be left at their defaults:
 2. Create a new app (or use an existing one)
 3. Under **Redirect URIs**, add: `http://127.0.0.1:8000/auth/callback`
 4. Copy the **Client ID** and **Client Secret** into your `.env`
+5. Add your spotify name and email to the **User Managment** tab 
 
 ## Running the Server
 

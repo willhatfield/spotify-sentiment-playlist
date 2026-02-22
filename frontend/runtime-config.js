@@ -2,8 +2,8 @@ window.__MOODMIX_CONFIG__ = Object.assign(
   {},
   window.__MOODMIX_CONFIG__ || {},
   {
-  "apiBaseUrl": "http://127.0.0.1:8000",
-  "frontendBasePath": "",
+  "apiBaseUrl": "",
+  "frontendBasePath": "/frontend",
   "supabaseUrl": "",
   "supabaseAnonKey": "",
   "supabaseProfilesTable": "profiles",

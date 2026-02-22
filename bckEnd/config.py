@@ -11,7 +11,7 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.2")
 
 SPOTIFY_CLIENT_ID = os.environ["SPOTIFY_CLIENT_ID"]
 SPOTIFY_CLIENT_SECRET = os.environ["SPOTIFY_CLIENT_SECRET"]
-SPOTIFY_REDIRECT_URI = os.environ["SPOTIFY_REDIRECT_URI"]
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8000/auth/callback")
 
 SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-secret-change-me")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8000/frontend")
@@ -35,7 +35,10 @@ def _parse_scopes(raw_value: str) -> str:
 CSV_PATH = os.getenv("SPOTIFY_DATASET_PATH") or os.getenv("CSV_PATH", "../Data/SpotifyTracksData.csv")
 
 CORS_ORIGINS = _parse_csv_list(
-    os.getenv("CORS_ORIGINS", "http://localhost:8000,http://localhost:3000")
+    os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000",
+    )
 )
 
 SPOTIFY_SCOPES = _parse_scopes(

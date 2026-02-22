@@ -3,7 +3,7 @@ from typing import Literal
 import time
 import secrets
 import logging
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +45,24 @@ except ImportError:
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 logger = logging.getLogger(__name__)
+
+
+def _request_origin(request: Request) -> str:
+    """Derive the public-facing origin (scheme://host) from the incoming request.
+
+    Respects ``X-Forwarded-Proto`` / ``X-Forwarded-Host`` when the app sits
+    behind a reverse-proxy or tunnel.
+    """
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or ""
+    )
+    if not host:
+        port_suffix = f":{request.url.port}" if request.url.port else ""
+        host = f"{request.url.hostname or 'localhost'}{port_suffix}"
+    return f"{scheme}://{host}"
 
 
 def _resolve_cors_origins() -> list[str]:
@@ -89,7 +107,7 @@ class MoodArcRequest(BaseModel):
     mode: Literal["uplift", "focus", "calm", "gym", "sleep", "rage_release"] = "uplift"
     stages: int = Field(default=5, ge=2, le=10)
     tracks: int = Field(default=30, ge=10, le=60)
-    public: bool = True
+    public: bool = False
 
 
 @app.get("/health")
@@ -141,7 +159,7 @@ async def _refresh_token_if_needed(request: Request) -> str | None:
         return token_data["access_token"]
 
 
-async def _ensure_spotify_profile(request: Request, access_token: str) -> dict | None:
+async def _ensure_spotify_profile(request: Request, access_token: str, _status_out: list | None = None) -> dict | None:
     """Ensure Spotify user profile is present in session; fetch from Spotify API when missing."""
     user_id = request.session.get("user_id")
     if user_id:
@@ -165,14 +183,16 @@ async def _ensure_spotify_profile(request: Request, access_token: str) -> dict |
 
         if profile_response.status_code == 200:
             break
-        if attempt == 0 and profile_response.status_code in {401, 429, 500, 502, 503, 504}:
-            await asyncio.sleep(0.25)
+        if attempt == 0 and profile_response.status_code in {401, 403, 429, 500, 502, 503, 504}:
+            await asyncio.sleep(1.0)
             continue
         logger.warning(
             "Spotify profile fetch failed status=%s body=%s",
             profile_response.status_code,
             profile_response.text[:400],
         )
+        if _status_out is not None:
+            _status_out.append(profile_response.status_code)
         return None
 
     if profile_response is None:
@@ -193,6 +213,22 @@ async def _ensure_spotify_profile(request: Request, access_token: str) -> dict |
 @app.get("/auth/login")
 def auth_login(request: Request):
     """Redirect to Spotify authorization page."""
+
+    # ---- hostname normalisation ----
+    # Session cookies are bound to the hostname.  If the user is on
+    # ``127.0.0.1`` but SPOTIFY_REDIRECT_URI points to ``localhost`` (or vice-
+    # versa), the callback will arrive on a different host and the session
+    # cookie (with the OAuth state) will be missing.  To prevent this, we
+    # redirect the browser to the same host that SPOTIFY_REDIRECT_URI uses
+    # *before* we set any session state.
+    if SPOTIFY_REDIRECT_URI:
+        redirect_parsed = urlparse(SPOTIFY_REDIRECT_URI)
+        expected_host = redirect_parsed.netloc        # e.g. "localhost:8000"
+        actual_host = request.headers.get("host", "")
+        if expected_host and actual_host and expected_host != actual_host:
+            correct_url = f"{redirect_parsed.scheme}://{expected_host}/auth/login"
+            return RedirectResponse(url=correct_url)
+
     # Always start OAuth from a clean session to avoid stale user/token state.
     request.session.clear()
     state = secrets.token_urlsafe(16)
@@ -214,8 +250,11 @@ def auth_login(request: Request):
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str = None, state: str = None, error: str = None):
     """Handle Spotify OAuth callback."""
-    webapp_url = f"{FRONTEND_URL}/webapp.html"
-    login_url = f"{FRONTEND_URL}/login.html"
+    # Derive frontend URLs from the current request origin so the redirect
+    # stays on the same host that the session cookie belongs to.
+    origin = _request_origin(request)
+    webapp_url = f"{origin}/frontend/webapp.html"
+    login_url = f"{origin}/frontend/login.html"
 
     if error:
         return RedirectResponse(url=f"{login_url}?error={error}")
@@ -254,10 +293,12 @@ async def auth_callback(request: Request, code: str = None, state: str = None, e
     request.session["refresh_token"] = token_data.get("refresh_token")
     request.session["expires_at"] = time.time() + token_data.get("expires_in", 3600)
 
-    profile = await _ensure_spotify_profile(request, token_data["access_token"])
+    _spotify_status: list = []
+    profile = await _ensure_spotify_profile(request, token_data["access_token"], _status_out=_spotify_status)
     if not profile:
         request.session.clear()
-        return RedirectResponse(url=f"{login_url}?error=profile_fetch_failed")
+        status_suffix = f"&spotify_status={_spotify_status[0]}" if _spotify_status else ""
+        return RedirectResponse(url=f"{login_url}?error=profile_fetch_failed{status_suffix}")
 
     # Clear the oauth state
     request.session.pop("oauth_state", None)
@@ -275,7 +316,6 @@ async def auth_me(request: Request):
 
     profile = await _ensure_spotify_profile(request, access_token)
     if not profile:
-        request.session.clear()
         raise HTTPException(status_code=401, detail="Spotify session is invalid. Please sign in again.")
 
     return {
@@ -332,19 +372,113 @@ async def generate_mood_arc_playlist(request: Request, req: MoodArcRequest):
             if not profile:
                 raise RuntimeError("No authenticated Spotify user found in session.")
 
-            sp = get_spotify_client_from_token(access_token)
-            user_id = str(profile["id"])
-            playlist_id, playlist_url = create_playlist(sp, user_id, playlist_name, public=req.public)
+            # Create playlist via Spotify REST API directly (avoids spotipy deprecation issues)
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                create_resp = await client.post(
+                    "https://api.spotify.com/v1/me/playlists",
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "name": playlist_name,
+                        "public": False,
+                        "description": f"Mood Arc playlist: {plan.start_label} → {plan.end_label}",
+                    },
+                )
 
-            for _, row in selected_df.iterrows():
-                tid = search_track_id(sp, row["track_name"], row["artist_name"])
-                if tid:
-                    track_ids.append(tid)
-                else:
-                    misses += 1
+            if create_resp.status_code != 201:
+                logger.error(
+                    "Spotify create playlist failed status=%s body=%s",
+                    create_resp.status_code,
+                    create_resp.text[:500],
+                )
+                raise RuntimeError(
+                    f"Spotify create playlist: HTTP {create_resp.status_code} - {create_resp.text[:200]}"
+                )
 
+            playlist_data = create_resp.json()
+            playlist_id = playlist_data["id"]
+            playlist_url = playlist_data["external_urls"]["spotify"]
+
+            # Search for tracks via Spotify REST API directly
+            found_tracks = []  # list of {id, name, artist, url}
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                for _, row in selected_df.iterrows():
+                    track_name = str(row.get("track_name", ""))
+                    artist_name = str(row.get("artist_name", ""))
+                    if not track_name:
+                        misses += 1
+                        continue
+
+                    q = f'track:"{track_name}" artist:"{artist_name}"'
+                    search_resp = await client.get(
+                        "https://api.spotify.com/v1/search",
+                        params={"q": q, "type": "track", "limit": 1},
+                        headers={"Authorization": f"Bearer {access_token}"},
+                    )
+
+                    if search_resp.status_code != 200:
+                        print(f"[SPOTIFY] Search failed status={search_resp.status_code} q={q[:80]} body={search_resp.text[:200]}")
+                        misses += 1
+                        continue
+
+                    items = search_resp.json().get("tracks", {}).get("items", [])
+                    if items:
+                        item = items[0]
+                        tid = item["id"]
+                        track_ids.append(tid)
+                        found_tracks.append({
+                            "id": tid,
+                            "name": item.get("name", track_name),
+                            "artist": ", ".join(a["name"] for a in item.get("artists", [])) or artist_name,
+                            "url": item.get("external_urls", {}).get("spotify", f"https://open.spotify.com/track/{tid}"),
+                            "uri": item.get("uri", f"spotify:track:{tid}"),
+                        })
+                    else:
+                        misses += 1
+
+            print(f"[SPOTIFY] Track search complete: found={len(track_ids)} misses={misses}")
+
+            tracks_added_count = 0
+            add_failed = False
             if track_ids:
-                sp.playlist_add_items(playlist_id, track_ids)
+                uris = [f"spotify:track:{tid}" for tid in track_ids]
+                # Try PUT first (replace/set tracks) — then fall back to POST (add tracks)
+                for method_label, method_fn in [("PUT", "put"), ("POST", "post")]:
+                    added_this_attempt = 0
+                    failed = False
+                    for i in range(0, len(uris), 100):
+                        batch = uris[i:i + 100]
+                        async with httpx.AsyncClient(timeout=15.0) as client:
+                            req_fn = getattr(client, method_fn)
+                            resp = await req_fn(
+                                f"https://api.spotify.com/v1/playlists/{playlist_id}/items",
+                                headers={
+                                    "Authorization": f"Bearer {access_token}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={"uris": batch},
+                            )
+                        print(f"[SPOTIFY] {method_label} tracks batch status={resp.status_code}")
+                        if resp.status_code in {200, 201}:
+                            added_this_attempt += len(batch)
+                        else:
+                            print(f"[SPOTIFY] {method_label} tracks FAILED body={resp.text[:300]}")
+                            failed = True
+                            break
+                    if not failed:
+                        tracks_added_count = added_this_attempt
+                        break
+                else:
+                    add_failed = True
+
+            if add_failed:
+                spotify_note = (
+                    "Playlist created but Spotify blocked adding tracks "
+                    "(Development Mode restriction). "
+                    "Use the track links below to add them manually."
+                )
         except Exception as exc:
             spotify_note = f"Spotify playlist step failed: {exc}"
 
@@ -372,9 +506,11 @@ async def generate_mood_arc_playlist(request: Request, req: MoodArcRequest):
         "tracks_per_stage": tracks_per_stage,
         "tracks_requested": req.tracks,
         "tracks_selected": len(selected_df),
-        "tracks_added": len(track_ids),
+        "tracks_added": tracks_added_count if 'tracks_added_count' in dir() else 0,
+        "tracks_found": len(track_ids),
         "tracks_missed": misses,
         "tracks_preview": preview_tracks,
+        "track_links": found_tracks if 'found_tracks' in dir() else [],
         "spotify_note": spotify_note,
         "safety_note": plan.safety_note,
     }

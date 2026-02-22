@@ -4,99 +4,69 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="api-base-url" content="" />
-    <title>Spotify MoodMix</title>
+    <title>MoodMix</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main class="page">
-      <section id="app-view" class="app" aria-live="polite">
+      <div id="app-view" class="app">
         <header class="app-header">
-          <div class="header-main">
-            <div class="spotify-chip">
-              <span class="spotify-logo" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <path d="M5.2 9.2c4.7-1.5 9.3-1.1 13.5.9" />
-                  <path d="M6.5 12.2c3.9-1.1 7.4-.8 10.7.8" />
-                  <path d="M7.8 15.1c2.9-.8 5.5-.6 7.9.6" />
-                </svg>
-              </span>
-              Spotify MoodMix
-            </div>
-            <button id="logout-btn" type="button" class="ghost-btn">Sign out</button>
+          <span class="app-name">MoodMix</span>
+          <div class="header-right">
+            <span id="connected-label" class="connected-text"></span>
+            <button id="logout-btn" type="button" class="link-btn">Sign out</button>
           </div>
-          <p id="connected-label" class="connected-text"></p>
         </header>
 
-        <section class="card chat-card">
-          <div class="chat-head">
-            <p class="muted">Mood journey</p>
-            <h2>From how you feel to how you want to feel</h2>
-          </div>
+        <div id="flow-error" class="error hidden" role="alert"></div>
 
-          <div class="msg msg-bot">Tell me where you are now and where you want to be — I'll build a playlist that takes you there.</div>
-          <div id="last-prompt" class="msg msg-user hidden"></div>
-
-          <div id="flow-error" class="error hidden" role="alert"></div>
-
-          <div id="playlist-box" class="playlist hidden" aria-live="polite">
-            <p class="muted">Your playlist is ready</p>
-            <h3 id="playlist-title"></h3>
-            <a id="playlist-link" target="_blank" rel="noreferrer" class="spotify-btn">Open in Spotify</a>
-          </div>
-
-          <form id="mood-form" class="composer">
+        <form id="mood-form" class="form-card">
+          <div class="field">
             <label for="mood-input">How are you feeling right now?</label>
             <textarea
               id="mood-input"
               maxlength="280"
               rows="3"
-              placeholder="I feel overwhelmed, anxious, and drained after a long day..."
+              placeholder="e.g. stressed and restless after a long day"
               required
             ></textarea>
-            <span id="char-count" class="char-count-label">0/280</span>
+            <span id="char-count" class="char-count">0/280</span>
+          </div>
 
-            <div class="mood-divider" aria-hidden="true">
-              <span class="mood-divider-line"></span>
-              <span class="mood-divider-icon">↓</span>
-              <span class="mood-divider-line"></span>
-            </div>
-
+          <div class="field">
             <label for="goal-input">How do you want to feel?</label>
             <textarea
               id="goal-input"
               maxlength="280"
               rows="3"
-              placeholder="Calm, focused, and ready to wind down for the night..."
+              placeholder="e.g. calm and ready to sleep"
               required
             ></textarea>
-            <span id="goal-char-count" class="char-count-label">0/280</span>
+            <span id="goal-char-count" class="char-count">0/280</span>
+          </div>
 
-            <div class="arc-controls">
-              <div class="control-group">
-                <label for="stages-input">Mood steps</label>
-                <div class="range-wrap">
-                  <input type="range" id="stages-input" min="2" max="10" value="5" />
-                  <span id="stages-value" class="range-value">5</span>
-                </div>
-                <p class="control-hint">How gradually to transition from your current mood to your goal</p>
-              </div>
-              <div class="control-group">
-                <label for="tracks-input">Total tracks</label>
-                <div class="range-wrap">
-                  <input type="range" id="tracks-input" min="10" max="60" step="5" value="30" />
-                  <span id="tracks-value" class="range-value">30</span>
-                </div>
-                <p class="control-hint">Number of songs in your playlist</p>
-              </div>
+          <div class="field">
+            <label for="tracks-input">Tracks</label>
+            <div class="range-row">
+              <input type="range" id="tracks-input" min="10" max="60" step="5" value="30" />
+              <span id="tracks-value" class="range-num">30</span>
             </div>
+          </div>
 
-            <div class="composer-footer">
-              <button id="create-btn" type="submit" class="spotify-btn">Create MoodMix</button>
-            </div>
-          </form>
-        </section>
-      </section>
+          <button id="create-btn" type="submit" class="primary-btn">Create playlist</button>
+        </form>
+
+        <div id="last-prompt" class="last-prompt hidden"></div>
+
+        <div id="playlist-box" class="result hidden" aria-live="polite">
+          <p class="result-label">Playlist created</p>
+          <h2 id="playlist-title"></h2>
+          <a id="playlist-link" target="_blank" rel="noreferrer" class="primary-btn">Open in Spotify</a>
+          <p id="playlist-note" class="note hidden"></p>
+          <div id="track-list" class="track-list hidden"></div>
+        </div>
+      </div>
     </main>
 
     <script src="./runtime-config.js"></script>

@@ -64,7 +64,9 @@ function showLoginErrorFromQueryParam() {
     return;
   }
 
-  setLoginError(`Spotify OAuth failed (${errorCode}). Please try again.`);
+  const spotifyStatus = searchParams.get("spotify_status");
+  const statusHint = spotifyStatus ? ` [Spotify HTTP ${spotifyStatus}]` : "";
+  setLoginError(`Spotify OAuth failed (${errorCode})${statusHint}. Please try again.`);
 }
 
 async function bootstrap() {

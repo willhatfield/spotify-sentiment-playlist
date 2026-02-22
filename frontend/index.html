@@ -3,21 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="api-base-url" content="" />
     <title>Spotify MoodMix</title>
-    <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="/frontend/style.css" />
   </head>
   <body>
     <main class="page">
       <section class="card center-card" aria-live="polite">
         <div class="spinner" aria-hidden="true"></div>
         <h1>Spotify MoodMix</h1>
-        <p id="boot-message" class="muted">Loading startup flow...</p>
+        <p id="boot-message" class="muted">Loading...</p>
       </section>
     </main>
 
-    <script src="./runtime-config.js"></script>
-    <script type="module" src="./index.js"></script>
+    <script src="/frontend/runtime-config.js"></script>
+    <script type="module" src="/frontend/index.ts"></script>
   </body>
 </html>

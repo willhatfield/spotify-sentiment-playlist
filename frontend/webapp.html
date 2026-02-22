@@ -6,66 +6,115 @@
     <meta name="api-base-url" content="" />
     <title>MoodMix</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./webapp.css" />
   </head>
   <body>
+    <div class="bg-glow" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <span class="logo">Mood<span class="logo-dot">Mix</span></span>
+      <div class="topbar-right">
+        <span id="connected-label" class="user-badge"></span>
+        <button id="logout-btn" type="button" class="sign-out hidden">
+          Sign out
+        </button>
+      </div>
+    </header>
+
     <main class="page">
       <div id="app-view" class="app">
-        <header class="app-header">
-          <span class="app-name">MoodMix</span>
-          <div class="header-right">
-            <span id="connected-label" class="connected-text"></span>
-            <button id="logout-btn" type="button" class="link-btn">Sign out</button>
-          </div>
-        </header>
+        <div class="hero">
+          <h1>What's your <span class="accent">mood</span>?</h1>
+          <p class="subtitle">
+            Tell us how you feel and where you want to go.
+            We'll craft the perfect playlist for your journey.
+          </p>
+        </div>
 
         <div id="flow-error" class="error hidden" role="alert"></div>
 
         <form id="mood-form" class="form-card">
           <div class="field">
-            <label for="mood-input">How are you feeling right now?</label>
+            <label for="mood-input">Right now I feel...</label>
             <textarea
               id="mood-input"
               maxlength="280"
-              rows="3"
-              placeholder="e.g. stressed and restless after a long day"
+              rows="2"
+              placeholder="stressed and restless after a long day"
               required
             ></textarea>
             <span id="char-count" class="char-count">0/280</span>
           </div>
 
+          <div class="divider" aria-hidden="true">
+            <span class="divider-line"></span>
+            <span class="divider-icon">&darr;</span>
+            <span class="divider-line"></span>
+          </div>
+
           <div class="field">
-            <label for="goal-input">How do you want to feel?</label>
+            <label for="goal-input">I want to feel...</label>
             <textarea
               id="goal-input"
               maxlength="280"
-              rows="3"
-              placeholder="e.g. calm and ready to sleep"
+              rows="2"
+              placeholder="calm and ready to sleep"
               required
             ></textarea>
             <span id="goal-char-count" class="char-count">0/280</span>
           </div>
 
-          <div class="field">
+          <div class="field tracks-field">
             <label for="tracks-input">Tracks</label>
             <div class="range-row">
-              <input type="range" id="tracks-input" min="10" max="60" step="5" value="30" />
+              <input
+                type="range"
+                id="tracks-input"
+                min="10"
+                max="60"
+                step="5"
+                value="30"
+              />
               <span id="tracks-value" class="range-num">30</span>
             </div>
           </div>
 
-          <button id="create-btn" type="submit" class="primary-btn">Create playlist</button>
+          <button id="create-btn" type="submit" class="create-btn">
+            Create playlist
+          </button>
         </form>
 
         <div id="last-prompt" class="last-prompt hidden"></div>
 
         <div id="playlist-box" class="result hidden" aria-live="polite">
-          <p class="result-label">Playlist created</p>
+          <div class="result-badge">Playlist created</div>
           <h2 id="playlist-title"></h2>
-          <a id="playlist-link" target="_blank" rel="noreferrer" class="primary-btn">Open in Spotify</a>
+          <a
+            id="playlist-link"
+            target="_blank"
+            rel="noreferrer"
+            class="open-btn"
+          >
+            Open in Spotify
+          </a>
           <p id="playlist-note" class="note hidden"></p>
           <div id="track-list" class="track-list hidden"></div>
         </div>
+
+        <button
+          id="new-playlist-btn"
+          type="button"
+          class="new-playlist-btn hidden"
+          onclick="location.reload()"
+        >
+          Create a new playlist
+        </button>
       </div>
     </main>
 

@@ -12,6 +12,7 @@ const lastPrompt = document.getElementById("last-prompt");
 const playlistBox = document.getElementById("playlist-box");
 const playlistTitle = document.getElementById("playlist-title");
 const playlistLink = document.getElementById("playlist-link");
+const heroSection = document.querySelector(".hero");
 
 const moodForm = document.getElementById("mood-form");
 const moodInput = document.getElementById("mood-input");
@@ -97,6 +98,11 @@ function renderPlaylist(data) {
     playlistLink.href = playlistUrl;
     setHidden(playlistLink, false);
     setHidden(playlistBox, false);
+    setHidden(heroSection, true);
+    setHidden(moodForm, true);
+    setHidden(lastPrompt, true);
+    const newBtn = document.getElementById("new-playlist-btn");
+    setHidden(newBtn, false);
   } else {
     const note = spotifyNote || "Playlist could not be created. Please try again.";
     setError(flowError, note);
@@ -215,20 +221,6 @@ async function handleSubmit(event) {
     });
 
     renderPlaylist(playlistData);
-
-    if (lastPrompt) {
-      lastPrompt.textContent = `${text} → ${goalText}`;
-      lastPrompt.classList.remove("hidden");
-    }
-
-    moodInput.value = "";
-    goalInput.value = "";
-    if (charCount) {
-      charCount.textContent = "0/280";
-    }
-    if (goalCharCount) {
-      goalCharCount.textContent = "0/280";
-    }
   } catch (error) {
     setError(flowError, error.message || "Failed to create playlist.");
   } finally {

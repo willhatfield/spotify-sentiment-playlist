@@ -153,6 +153,62 @@ def _fallback_plan(
     )
 
 
+def generate_playlist_name(
+    start_label: str,
+    end_label: str,
+    mode: str,
+) -> str:
+    """
+    Use OpenAI to generate a creative, short playlist subtitle.
+    Returns the full name as "MoodMix - {subtitle}".
+    Falls back to a simple name if the API call fails.
+    """
+    fallback = f"MoodMix - {mode.replace('_', ' ').title()}"
+
+    api_key = (OPENAI_API_KEY or "").strip()
+    if _looks_like_placeholder(api_key):
+        return fallback
+
+    try:
+        from openai import OpenAI
+
+        client = OpenAI(api_key=api_key)
+
+        resp = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You name playlists. Given a mood journey (start mood -> end mood) and a mode, "
+                        "generate ONE short, creative subtitle (2-4 words max). "
+                        "It should feel like a real playlist name — tasteful, evocative, not corny or cheesy. "
+                        "Think lowercase indie-magazine vibes, not motivational poster. "
+                        "No quotes, no punctuation, no emojis. Just the words."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Start mood: {start_label}\n"
+                        f"End mood: {end_label}\n"
+                        f"Mode: {mode}\n\n"
+                        "Playlist subtitle:"
+                    ),
+                },
+            ],
+            max_tokens=20,
+            temperature=0.9,
+        )
+
+        subtitle = resp.choices[0].message.content.strip().strip('"\'')
+        if subtitle:
+            return f"MoodMix - {subtitle}"
+        return fallback
+    except Exception:
+        return fallback
+
+
 def score_start_end_with_openai(
     user_text: str,
     goal: str,

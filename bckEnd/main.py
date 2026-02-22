@@ -3,7 +3,7 @@ from typing import Literal
 import time
 import secrets
 import logging
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +45,24 @@ except ImportError:
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 logger = logging.getLogger(__name__)
+
+
+def _request_origin(request: Request) -> str:
+    """Derive the public-facing origin (scheme://host) from the incoming request.
+
+    Respects ``X-Forwarded-Proto`` / ``X-Forwarded-Host`` when the app sits
+    behind a reverse-proxy or tunnel.
+    """
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or ""
+    )
+    if not host:
+        port_suffix = f":{request.url.port}" if request.url.port else ""
+        host = f"{request.url.hostname or 'localhost'}{port_suffix}"
+    return f"{scheme}://{host}"
 
 
 def _resolve_cors_origins() -> list[str]:
@@ -193,6 +211,22 @@ async def _ensure_spotify_profile(request: Request, access_token: str) -> dict |
 @app.get("/auth/login")
 def auth_login(request: Request):
     """Redirect to Spotify authorization page."""
+
+    # ---- hostname normalisation ----
+    # Session cookies are bound to the hostname.  If the user is on
+    # ``127.0.0.1`` but SPOTIFY_REDIRECT_URI points to ``localhost`` (or vice-
+    # versa), the callback will arrive on a different host and the session
+    # cookie (with the OAuth state) will be missing.  To prevent this, we
+    # redirect the browser to the same host that SPOTIFY_REDIRECT_URI uses
+    # *before* we set any session state.
+    if SPOTIFY_REDIRECT_URI:
+        redirect_parsed = urlparse(SPOTIFY_REDIRECT_URI)
+        expected_host = redirect_parsed.netloc        # e.g. "localhost:8000"
+        actual_host = request.headers.get("host", "")
+        if expected_host and actual_host and expected_host != actual_host:
+            correct_url = f"{redirect_parsed.scheme}://{expected_host}/auth/login"
+            return RedirectResponse(url=correct_url)
+
     # Always start OAuth from a clean session to avoid stale user/token state.
     request.session.clear()
     state = secrets.token_urlsafe(16)
@@ -214,8 +248,11 @@ def auth_login(request: Request):
 @app.get("/auth/callback")
 async def auth_callback(request: Request, code: str = None, state: str = None, error: str = None):
     """Handle Spotify OAuth callback."""
-    webapp_url = f"{FRONTEND_URL}/webapp.html"
-    login_url = f"{FRONTEND_URL}/login.html"
+    # Derive frontend URLs from the current request origin so the redirect
+    # stays on the same host that the session cookie belongs to.
+    origin = _request_origin(request)
+    webapp_url = f"{origin}/frontend/webapp.html"
+    login_url = f"{origin}/frontend/login.html"
 
     if error:
         return RedirectResponse(url=f"{login_url}?error={error}")

@@ -20,8 +20,6 @@ const charCount = document.getElementById("char-count");
 const goalCharCount = document.getElementById("goal-char-count");
 const createBtn = document.getElementById("create-btn");
 
-const stagesInput = document.getElementById("stages-input");
-const stagesValue = document.getElementById("stages-value");
 const tracksInput = document.getElementById("tracks-input");
 const tracksValue = document.getElementById("tracks-value");
 
@@ -78,7 +76,7 @@ function setSubmitting(next) {
   submitting = next;
   if (createBtn) {
     createBtn.disabled = next;
-    createBtn.textContent = next ? "Creating playlist..." : "Create MoodMix";
+    createBtn.textContent = next ? "Creating playlist..." : "Create playlist";
   }
 }
 
@@ -87,8 +85,11 @@ function renderPlaylist(data) {
     return;
   }
 
-  const playlistName = data?.playlist_name || data?.playlistName || "MoodMix Playlist";
+  const playlistName = data?.playlist_name || data?.playlistName || "Playlist";
   const playlistUrl = data?.playlist_url || data?.playlistUrl || "";
+  const trackLinks = data?.track_links || [];
+  const spotifyNote = data?.spotify_note || "";
+  const tracksAdded = data?.tracks_added || 0;
 
   playlistTitle.textContent = playlistName;
 
@@ -97,8 +98,40 @@ function renderPlaylist(data) {
     setHidden(playlistLink, false);
     setHidden(playlistBox, false);
   } else {
-    const note = data?.spotify_note || "Playlist could not be created. Please try again.";
+    const note = spotifyNote || "Playlist could not be created. Please try again.";
     setError(flowError, note);
+    return;
+  }
+
+  // Show note if tracks couldn't be added server-side
+  const noteEl = document.getElementById("playlist-note");
+  if (noteEl && spotifyNote) {
+    noteEl.textContent = spotifyNote;
+    setHidden(noteEl, false);
+  }
+
+  // Render track links when server-side add failed
+  const trackListEl = document.getElementById("track-list");
+  if (trackListEl && trackLinks.length > 0 && tracksAdded === 0) {
+    trackListEl.innerHTML = "";
+    const heading = document.createElement("p");
+    heading.className = "track-list-heading";
+    heading.textContent = `${trackLinks.length} tracks found — click to open in Spotify:`;
+    trackListEl.appendChild(heading);
+
+    trackLinks.forEach((track, i) => {
+      const a = document.createElement("a");
+      a.href = track.url;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      a.className = "track-link";
+      a.textContent = track.name && track.artist
+        ? `${track.name} — ${track.artist}`
+        : `Track ${i + 1}`;
+      trackListEl.appendChild(a);
+    });
+
+    setHidden(trackListEl, false);
   }
 }
 
@@ -166,7 +199,7 @@ async function handleSubmit(event) {
 
   try {
     const mode = detectMode(text + " " + goalText);
-    const userStages = stagesInput ? parseInt(stagesInput.value, 10) : 5;
+    const userStages = 5;
     const userTracks = tracksInput ? parseInt(tracksInput.value, 10) : 30;
 
     const playlistData = await apiFetch("/generate-mood-arc-playlist", {
@@ -227,12 +260,6 @@ function bindEvents() {
   if (goalInput && goalCharCount) {
     goalInput.addEventListener("input", () => {
       goalCharCount.textContent = `${goalInput.value.length}/280`;
-    });
-  }
-
-  if (stagesInput && stagesValue) {
-    stagesInput.addEventListener("input", () => {
-      stagesValue.textContent = stagesInput.value;
     });
   }
 
